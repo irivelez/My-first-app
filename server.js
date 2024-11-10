@@ -3,6 +3,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 const axios = require('axios');
 const session = require('express-session');
+const MemoryStore = require('memorystore')(session);
 
 // Load environment variables
 dotenv.config();
@@ -11,6 +12,10 @@ const app = express();
 
 // Set up session middleware
 app.use(session({
+    cookie: { maxAge: 86400000 }, // 24 hours
+    store: new MemoryStore({
+        checkPeriod: 86400000 // prune expired entries every 24h
+    }),
     secret: 'spotify-auth-secret',
     resave: false,
     saveUninitialized: false
