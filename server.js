@@ -46,6 +46,12 @@ function insertPlaylistsToHTML(playlists) {
     container.innerHTML = playlistsHTML;
 }
 
+// Add logging middleware at the top of your routes
+app.use((req, res, next) => {
+    console.log('Incoming request:', req.method, req.path, req.query);
+    next();
+});
+
 // Spotify OAuth routes
 app.get('/auth/spotify', (req, res) => {
     // Generate a random state value for security
@@ -65,15 +71,22 @@ app.get('/auth/spotify', (req, res) => {
 });
 
 app.get('/callback', async (req, res) => {
+    console.log('Callback route hit');
+    console.log('Query params:', req.query);
+    console.log('Session state:', req.session.state);
+    
     const { code, state } = req.query;
 
-    // Verify state to prevent CSRF attacks
     if (state !== req.session.state) {
-        console.error('State mismatch');
-        return res.redirect('/'); // Redirect to home page on error
+        console.error('State mismatch:', { 
+            receivedState: state, 
+            sessionState: req.session.state 
+        });
+        return res.redirect('/');
     }
 
     try {
+        console.log('Attempting token exchange...');
         // Exchange authorization code for access token
         const tokenResponse = await axios.post('https://accounts.spotify.com/api/token', 
             new URLSearchParams({
@@ -97,8 +110,12 @@ app.get('/callback', async (req, res) => {
         // Redirect to home page after successful authentication
         res.redirect('/');
     } catch (error) {
-        console.error('Spotify OAuth Error:', error.response?.data || error.message);
-        res.redirect('/'); // Redirect to home page on error
+        console.error('Detailed error:', {
+            message: error.message,
+            response: error.response?.data,
+            stack: error.stack
+        });
+        res.redirect('/');
     }
 });
 
@@ -134,6 +151,9 @@ app.get('/refresh_token', async (req, res) => {
 
 // API endpoint to get featured playlists
 app.get('/api/playlists', async (req, res) => {
+    console.log('Playlists route hit');
+    console.log('Access token exists:', !!accessToken);
+    
     if (!accessToken) {
         return res.status(401).json({ error: 'Not authenticated' });
     }
@@ -164,7 +184,7 @@ app.get('/api/playlists', async (req, res) => {
 
         res.json(playlists);
     } catch (error) {
-        console.error('Error fetching playlists:', error.response?.data || error.message);
+        console.error('Playlists error:', error.response?.data || error.message);
         res.status(500).json({ error: 'Failed to fetch playlists' });
     }
 });

@@ -207,26 +207,16 @@
         // Function to fetch playlists with search
         async function fetchPlaylists(searchQuery = '') {
             const container = document.getElementById('playlists-container');
-            if (!container) {
-                console.error('Playlists container not found');
-                return;
-            }
-
             try {
                 container.innerHTML = '<p>Loading playlists...</p>';
                 
-                // Add console.log to debug the search query
-                console.log('Fetching playlists with search:', searchQuery);
-                
                 const response = await fetch(`/api/playlists${searchQuery ? `?search=${searchQuery}` : ''}`);
+                const data = await response.json();
+                
                 if (!response.ok) {
-                    throw new Error('Failed to fetch playlists');
+                    throw new Error(data.error || 'Failed to fetch playlists');
                 }
                 
-                const data = await response.json();
-                console.log('Received playlists:', data); // Debug log
-                
-                // Update the display
                 if (data.playlists && data.playlists.items) {
                     const playlistsHTML = data.playlists.items.map(playlist => `
                         <div class="playlist-item">
@@ -240,11 +230,11 @@
                     
                     container.innerHTML = playlistsHTML;
                 } else {
-                    container.innerHTML = '<p>No playlists found</p>';
+                    container.innerHTML = '<p>No playlists available. Please try connecting with Spotify again.</p>';
                 }
             } catch (error) {
-                console.error('Error fetching playlists:', error);
-                container.innerHTML = '<p>Error loading playlists</p>';
+                console.error('Playlist fetch error:', error);
+                container.innerHTML = `<p>Error: ${error.message}. Please try connecting with Spotify again.</p>`;
             }
         }
 
