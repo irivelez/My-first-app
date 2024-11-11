@@ -75,39 +75,50 @@ app.get('/auth/spotify', (req, res) => {
 });
 
 app.get('/callback', async (req, res) => {
-    console.log('Callback route hit');
-    console.log('Query parameters:', req.query);
-    
+    console.log('=== Callback Route Hit ===');
+    console.log('Full URL:', req.protocol + '://' + req.get('host') + req.originalUrl);
+    console.log('Query:', req.query);
+    console.log('Session:', req.session);
+
     const { code, state } = req.query;
 
     if (!code || !state) {
-        console.error('Missing code or state');
+        console.error('Missing parameters:', { code: !!code, state: !!state });
         return res.redirect('/?error=missing_params');
     }
 
     try {
-        const tokenResponse = await axios.post('https://accounts.spotify.com/api/token', 
-            new URLSearchParams({
-                grant_type: 'authorization_code',
-                code,
-                redirect_uri: process.env.CALLBACK_URL
-            }).toString(),
-            {
-                headers: {
-                    'Authorization': 'Basic ' + Buffer.from(process.env.CLIENT_ID + ':' + process.env.CLIENT_SECRET).toString('base64'),
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
+        console.log('Attempting token exchange...');
+        const tokenUrl = 'https://accounts.spotify.com/api/token';
+        const tokenData = new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: process.env.CALLBACK_URL
+        }).toString();
+
+        console.log('Token exchange parameters:', {
+            redirectUri: process.env.CALLBACK_URL,
+            code: code.substring(0, 10) + '...' // Log only part of the code for security
+        });
+
+        const tokenResponse = await axios.post(tokenUrl, tokenData, {
+            headers: {
+                'Authorization': 'Basic ' + Buffer.from(process.env.CLIENT_ID + ':' + process.env.CLIENT_SECRET).toString('base64'),
+                'Content-Type': 'application/x-www-form-urlencoded'
             }
-        );
+        });
 
-        // Store tokens
+        console.log('Token exchange successful');
         req.session.accessToken = tokenResponse.data.access_token;
-        accessToken = tokenResponse.data.access_token; // Also store globally
+        accessToken = tokenResponse.data.access_token;
 
-        console.log('Authentication successful, redirecting to home');
         res.redirect('/');
     } catch (error) {
-        console.error('Authentication error:', error.response?.data || error.message);
+        console.error('Token exchange error:', {
+            message: error.message,
+            data: error.response?.data,
+            status: error.response?.status
+        });
         res.redirect('/?error=auth_failed');
     }
 });
@@ -184,6 +195,15 @@ app.get('/', (req, res) => {
 app.get('*', (req, res) => {
     console.log('404 route hit:', req.path);
     res.status(404).send('Not Found');
+});
+
+// Add a route to check configuration
+app.get('/check-config', (req, res) => {
+    res.json({
+        callbackConfigured: process.env.CALLBACK_URL === 'https://my-first-app.onrender.com/callback',
+        clientIdLength: process.env.CLIENT_ID?.length || 0,
+        clientSecretLength: process.env.CLIENT_SECRET?.length || 0
+    });
 });
 
 const PORT = process.env.PORT || 3000;
