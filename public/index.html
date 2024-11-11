@@ -74,10 +74,12 @@
             font-size: 1.1em;
             cursor: pointer;
             transition: background-color 0.3s;
+            text-decoration: none;
+            display: inline-block;
         }
 
         .spotify-btn:hover {
-            background-color: #1aa34a;
+            background-color: #1ed760;
         }
 
         .playlists-container {
@@ -161,9 +163,7 @@
     <div class="container">
         <!-- Yes, we have a Spotify connect button -->
         <div class="spotify-login">
-            <button class="spotify-btn" onclick="window.location.href='/auth/spotify'">
-                Connect with Spotify
-            </button>
+            <a href="/auth/spotify" class="spotify-btn">Connect with Spotify</a>
             <!-- Add logout button -->
             <button class="spotify-btn logout-btn" onclick="window.location.href='/auth/logout'">
                 Logout
