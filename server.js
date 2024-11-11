@@ -54,6 +54,8 @@ app.use((req, res, next) => {
 
 // Spotify OAuth routes
 app.get('/auth/spotify', (req, res) => {
+    console.log('Auth route hit - generating Spotify auth URL');
+    
     // Generate a random state value for security
     const state = Math.random().toString(36).substring(7);
     req.session.state = state;
@@ -66,37 +68,33 @@ app.get('/auth/spotify', (req, res) => {
         'user-top-read'
     ];
     
-    const authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${spotifyConfig.clientId}&redirect_uri=${encodeURIComponent(spotifyConfig.callbackURL)}&scope=${encodeURIComponent(scopes.join(' '))}&state=${state}`;
+    const authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.CALLBACK_URL)}&scope=${encodeURIComponent(scopes.join(' '))}&state=${state}`;
+    
+    console.log('Redirecting to:', authUrl);
     res.redirect(authUrl);
 });
 
 app.get('/callback', async (req, res) => {
     console.log('Callback route hit');
-    console.log('Query params:', req.query);
-    console.log('Session state:', req.session.state);
+    console.log('Query parameters:', req.query);
     
     const { code, state } = req.query;
 
-    if (state !== req.session.state) {
-        console.error('State mismatch:', { 
-            receivedState: state, 
-            sessionState: req.session.state 
-        });
-        return res.redirect('/');
+    if (!code || !state) {
+        console.error('Missing code or state');
+        return res.redirect('/?error=missing_params');
     }
 
     try {
-        console.log('Attempting token exchange...');
-        // Exchange authorization code for access token
         const tokenResponse = await axios.post('https://accounts.spotify.com/api/token', 
             new URLSearchParams({
                 grant_type: 'authorization_code',
                 code,
-                redirect_uri: spotifyConfig.callbackURL
+                redirect_uri: process.env.CALLBACK_URL
             }).toString(),
             {
                 headers: {
-                    'Authorization': 'Basic ' + Buffer.from(spotifyConfig.clientId + ':' + spotifyConfig.clientSecret).toString('base64'),
+                    'Authorization': 'Basic ' + Buffer.from(process.env.CLIENT_ID + ':' + process.env.CLIENT_SECRET).toString('base64'),
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
             }
@@ -104,18 +102,13 @@ app.get('/callback', async (req, res) => {
 
         // Store tokens
         req.session.accessToken = tokenResponse.data.access_token;
-        req.session.refreshToken = tokenResponse.data.refresh_token;
-        accessToken = tokenResponse.data.access_token;
+        accessToken = tokenResponse.data.access_token; // Also store globally
 
-        // Redirect to home page after successful authentication
+        console.log('Authentication successful, redirecting to home');
         res.redirect('/');
     } catch (error) {
-        console.error('Detailed error:', {
-            message: error.message,
-            response: error.response?.data,
-            stack: error.stack
-        });
-        res.redirect('/');
+        console.error('Authentication error:', error.response?.data || error.message);
+        res.redirect('/?error=auth_failed');
     }
 });
 
@@ -149,19 +142,15 @@ app.get('/refresh_token', async (req, res) => {
     }
 });
 
-// API endpoint to get featured playlists
+// API endpoint for playlists
 app.get('/api/playlists', async (req, res) => {
-    console.log('Playlists route hit');
-    console.log('Access token exists:', !!accessToken);
+    console.log('Playlist route hit, token:', !!accessToken);
     
     if (!accessToken) {
         return res.status(401).json({ error: 'Not authenticated' });
     }
 
     try {
-        const searchQuery = req.query.search?.toLowerCase();
-        console.log('Search query:', searchQuery); // Debug log
-        
         const playlistsResponse = await axios.get('https://api.spotify.com/v1/browse/featured-playlists', {
             headers: {
                 'Authorization': `Bearer ${accessToken}`
@@ -172,19 +161,9 @@ app.get('/api/playlists', async (req, res) => {
             }
         });
 
-        let playlists = playlistsResponse.data;
-
-        // Filter playlists if search query exists
-        if (searchQuery) {
-            playlists.playlists.items = playlists.playlists.items.filter(playlist => 
-                playlist.name.toLowerCase().includes(searchQuery) || 
-                playlist.description.toLowerCase().includes(searchQuery)
-            );
-        }
-
-        res.json(playlists);
+        res.json(playlistsResponse.data);
     } catch (error) {
-        console.error('Playlists error:', error.response?.data || error.message);
+        console.error('Playlist fetch error:', error.response?.data || error.message);
         res.status(500).json({ error: 'Failed to fetch playlists' });
     }
 });
@@ -199,6 +178,12 @@ app.get('/auth/logout', (req, res) => {
 // Serve index.html for root route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Add this catch-all route at the end
+app.get('*', (req, res) => {
+    console.log('404 route hit:', req.path);
+    res.status(404).send('Not Found');
 });
 
 const PORT = process.env.PORT || 3000;
